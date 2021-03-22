@@ -1,325 +1,279 @@
 <!DOCTYPE html>
 <html>
-<head>
-
-    <title>WebGL 3D GTA5 Map</title>
-
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-
-    <script src="jquery.min.js"></script>
-    <script src="three.js"></script>
-    <script src="Detector.js"></script>
-    <script src="OrbitControls.js"></script>
-    <script src="OBJLoader.js"></script>
-    <script src="MTLLoader.js"></script>
-
-    <style>
-        body {
-            overflow: hidden;
-            margin: 0;
-            padding: 0;
-            /*background: rgba(0, 0, 0, 255);*/
-			display: none;
-			font-family: 'Open Sans','Segoe UI','Helvetica','Arial','sans-serif','Apple Color Emoji','Segoe UI Emoji','Segoe UI Symbol';
-        }
-
-        .location {
-			position: fixed;
-			top: 32px;
-			left: 32px;
-			width: 128px;
-			background: rgba(0,0,0,0.8);
-			padding: 8px;
-		}
-		
-		.text {
-			color: #FFF;
-		}
-		
-		.help {
-			position: fixed;
-			bottom: 32px;
-			right: 32px;
-		}
-		.help span {
-			color: #FFFFFF;
-			background: rgba(0,0,0,0.8);
-			margin-left: 8px;
-			display: inline-flex;
-			border-radius: 6px;
-			box-shadow: 0px 0px 8px rgb(0 0 0 / 80%);
-		}
-		.help span b {
-			padding: 8px;
-			background: rgba(255,255,255,0.9);
-			color: #000;
-			border-radius: 4px;
-		}
-		.help span s {
-			padding: 8px;
-			text-decoration: none;
-		}
-    </style>
-
-</head>
-<body>
-
-    <div class="location">
-		<div class="text"></div>
-	</div>
-	
-	<div class="help">
-		<span><b>F1</b><s>Open / Close</s></span>
-		<span><b>Mouse</b><s>Rotate / Scale / Move</s></span>
-		<span><b>Click</b><s>Waypoint</s></span>
-	</div>
-	
-	<canvas id="canvas" style="display: none;">Your browser is not support canvas</canvas>
-
-    <script>
-		
-        if (!Detector.webgl) {
-            Detector.addGetWebGLMessage();
-        }
-		
-        var container;
-
-        var camera, controls, scene, renderer;
-        var lighting, ambient, keyLight, fillLight, backLight;
-		var taa, object_g, rollOverMesh, rollOverMaterial, cp, tmpWater;
-		var markList = new Array(0);              // Labels list
-		var mouseX, mouseY, oldMouseX, oldMouseY; // Storage mouse position
-		var lastClick;
-		var webKey = 112;                         // F1
-		var isFocus = false;
-		
-        init();
-        animate();
-		
-		// Callback the Lua to finished loading map
-		$.post('https://zerodream_3dmap/callback', JSON.stringify({
-			action: 'loaded'
-		}));
-		
-		const mouse = new THREE.Vector2();
-		const raycaster = new THREE.Raycaster();
-		
-		setInterval(function() {
-			if(cp != null && cp != undefined && isFocus) {
-				$(".location>.text").html("X: " + cp.x.toFixed(2) + "<br>Y: " + -cp.z.toFixed(2) + "<br>Z: " + cp.y.toFixed(2));
+	<head>
+		<title>WebGL 3D GTA5 Map</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<script src="jquery.min.js"></script>
+		<script src="three.js"></script>
+		<script src="Detector.js"></script>
+		<script src="OrbitControls.js"></script>
+		<script src="OBJLoader.js"></script>
+		<script src="MTLLoader.js"></script>
+		<style>body { overflow: hidden; margin: 0; padding: 0; display: none; font-family: 'Open Sans','Segoe UI','Helvetica','Arial','sans-serif','Apple Color Emoji','Segoe UI Emoji','Segoe UI Symbol'; } .location { position: fixed; top: 32px; left: 32px; width: 128px; background: rgba(0,0,0,0.8); padding: 8px; } .text { color: #FFF; } .help { position: fixed; bottom: 32px; right: 32px; } .help span { color: #FFFFFF; background: rgba(0,0,0,0.8); margin-left: 8px; display: inline-flex; border-radius: 6px; box-shadow: 0px 0px 8px rgb(0 0 0 / 80%); } .help span b { padding: 8px; background: rgba(255,255,255,0.9); color: #000; border-radius: 4px; } .help span s { padding: 8px; text-decoration: none; }</style>
+	</head>
+	<body>
+		<div class="location">
+			<div class="text"></div>
+		</div>
+		<div class="help">
+			<span>
+				<b>F1</b>
+				<s>Open / Close</s>
+			</span>
+			<span>
+				<b>Mouse</b>
+				<s>Rotate / Scale / Move</s>
+			</span>
+			<span>
+				<b>Click</b>
+				<s>Waypoint</s>
+			</span>
+		</div>
+		<canvas id="canvas" style="display: none;">Your browser is not support canvas</canvas>
+		<script type="text/javascript">
+			if (!Detector.webgl) {
+				Detector.addGetWebGLMessage();
 			}
-		}, 200);
-		
-		// Calculate text width
-		function textSize(fontSize, fontFamily, text) {
-			var span = document.createElement("span");
-			var result = {};
-			result.width = span.offsetWidth;
-			result.height = span.offsetHeight;
-			span.style.visibility = "hidden";
-			span.style.fontSize = fontSize;
-			span.style.fontFamily = fontFamily;
-			span.style.display = "inline-block";
-			document.body.appendChild(span);
-			if(typeof span.textContent != "undefined") {
-				span.textContent = text;
-			} else {
-				span.innerText = text;
+
+			var container;
+			var camera, controls, scene, renderer;
+			var lighting, ambient, keyLight, fillLight, backLight;
+			var taa, object_g, rollOverMesh, rollOverMaterial, cp, tmpWater;
+			var markList = new Array(0); // Labels list
+			var mouseX, mouseY, oldMouseX, oldMouseY; // Storage mouse position
+			var lastClick;
+			var webKey = 112; // F1
+			var isFocus = false;
+
+			init();
+			animate();
+
+			// Callback the Lua to finished loading map
+			$.post('https://zerodream_3dmap/callback', JSON.stringify({
+				action: 'loaded'
+			}));
+
+			const mouse = new THREE.Vector2();
+			const raycaster = new THREE.Raycaster();
+
+			setInterval(function() {
+				if (cp != null && cp != undefined && isFocus) {
+					$(".location>.text").html("X: " + cp.x.toFixed(2) + "<br>Y: " + -cp.z.toFixed(2) + "<br>Z: " + cp.y.toFixed(2));
+				}
+			}, 200);
+
+			// Calculate text width
+			function textSize(fontSize, fontFamily, text) {
+				var span = document.createElement("span");
+				var result = {};
+				result.width = span.offsetWidth;
+				result.height = span.offsetHeight;
+				span.style.visibility = "hidden";
+				span.style.fontSize = fontSize;
+				span.style.fontFamily = fontFamily;
+				span.style.display = "inline-block";
+				document.body.appendChild(span);
+				if (typeof span.textContent != "undefined") {
+					span.textContent = text;
+				} else {
+					span.innerText = text;
+				}
+				result.width = parseFloat(window.getComputedStyle(span).width) - result.width;
+				result.height = parseFloat(window.getComputedStyle(span).height) - result.height;
+				return result;
 			}
-			result.width = parseFloat(window.getComputedStyle(span).width) - result.width;
-			result.height = parseFloat(window.getComputedStyle(span).height) - result.height;
-			return result;
-		}
-		
-		// Add new text labels
-		window.addTextMark = function(name, text, x, y, z, font, fontSize, width, height, color, background) {
-		
-			if(name == null || text == null || x == null || y == null || z == null) {
-				return false;
-			}
-			
-			for(var i = 0;i < markList.length;i++) {
-				if(markList[i].name == name) {
+
+			// Add new text labels
+			window.addTextMark = function(name, text, x, y, z, font, fontSize, width, height, color, background) {
+
+				if (name == null || text == null || x == null || y == null || z == null) {
 					return false;
 				}
-			}
-			
-			if(font == null) {
-				font = "Arial"; // Set your default font here
-			}
-			if(fontSize == null) {
-				fontSize = 100;
-			}
-			
-			var fontTempSize = textSize(fontSize + "px", font, text);
-			
-			if(width == null) {
-				width = fontTempSize.width / 3.4;
-			}
-			if(height == null) {
-				height = fontTempSize.height / 2.5;
-			}
-			if(color == null) {
-				color = "#FFFFFF";
-			}
-			if(background == null) {
-				background = "rgba(0,0,0,0.7)";
-			}
-			
-			let canvas = document.createElement('canvas');
-			let ctx    = canvas.getContext('2d');
-			canvas.width = width * 4;
-			canvas.height = height * 4;
-			ctx.fillStyle = background;
-			ctx.fillRect(0, 0, width * 4, height * 4);
-			ctx.fillStyle = color;
-			ctx.font = 'normal ' + fontSize + 'px "' + font + '"';
-			ctx.fillText(text, fontSize / 2.6, fontSize + 32);
-			let url = canvas.toDataURL('image/png');
-			let geometry1 = new THREE.PlaneGeometry(width, height);
-			let texture = THREE.ImageUtils.loadTexture(url, null, function (t) {});
-			 
-			let material1 = new THREE.MeshBasicMaterial({
-				map: texture,
-				side: THREE.DoubleSide,
-				opacity: 1,
-				transparent: true,
-			});
-			 
-			let newMark = new THREE.Mesh(geometry1, material1);
-			newMark.position.set(x, z, -y);
-			newMark.name = name;
-			markList.push(newMark);
-			scene.add(newMark);
-			render();
-		}
-		
-		// Remove text label
-		window.removeTextMark = function(name) {
-			if(name == null) {
-				return false;
-			}
-			
-			for(var i = 0;i < markList.length;i++) {
-				if(markList[i].name == name) {
-					var selectedObject = scene.getObjectByName(name);
-					scene.remove(selectedObject);
-					markList.splice(i, 1);
-					render();
-					return true;
-				}
-			}
-			return false;
-		}
-		
-		// Update label coords
-		window.updateTextMarkCoords = function(name, x, y, z) {
-			var selectedObject = scene.getObjectByName(name);
-			if(selectedObject != null && selectedObject.position != undefined) {
-				selectedObject.position.set(x, z, -y);
-				render();
-			}
-		}
 
-		// Init functions
-        function init() {
-
-            container = document.createElement('div');
-            document.body.appendChild(container);
-			
-			// Set default camera
-            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 50000);
-            camera.position.x = -6817.53520738839;
-            camera.position.y = 5122.667802130858;
-            camera.position.z = 2358.9515954296567;
-			camera.rotation.x = -1.0487587367436757;
-			camera.rotation.y = -0.8076078014684026;
-			camera.rotation.z = -0.8984546685815199;
-
-            scene = new THREE.Scene();
-            lighting = false;
-			
-			ambient = new THREE.AmbientLight(0xffffff, 0.5);
-			scene.add(ambient);
-	
-			// Lights
-            keyLight = new THREE.DirectionalLight(new THREE.Color('hsl(30, 100%, 75%)'), 1.5);
-            keyLight.position.set(-100, 0, 100);
-            fillLight = new THREE.DirectionalLight(new THREE.Color('hsl(240, 100%, 75%)'), 1.75);
-            fillLight.position.set(100, 0, 100);
-            backLight = new THREE.DirectionalLight(0xffffff, 1.0);
-            backLight.position.set(100, 0, -100).normalize();
-			
-			// Load the meterial
-            var mtlLoader = new THREE.MTLLoader();
-            mtlLoader.setBaseUrl('obj/');
-            mtlLoader.setPath('obj/');
-            mtlLoader.load('model.mtl', function (materials) {
-				taa = materials;
-                materials.preload();
-				
-				for(var a in materials.materials) {
-					if(materials.materials[a].map != null && materials.materials[a].map != undefined) {
-						materials.materials[a].map.magFilter = THREE.NearestFilter;
-						materials.materials[a].map.minFilter = THREE.LinearFilter;
+				for (var i = 0; i < markList.length; i++) {
+					if (markList[i].name == name) {
+						return false;
 					}
 				}
-				
-				// Load the model
-                var objLoader = new THREE.OBJLoader();
-                objLoader.setMaterials(materials);
-                objLoader.setPath('obj/');
-                objLoader.load('model.obj', function (object) {
-					window.object_g = object;
-                    scene.add(object);
-					
-					// Mouse box geometry
-					/*const rollOverGeo = new THREE.BoxGeometry( 20, 20, 20 );
+
+				if (font == null) {
+					font = "Arial"; // Set your default font here
+				}
+				if (fontSize == null) {
+					fontSize = 100;
+				}
+
+				var fontTempSize = textSize(fontSize + "px", font, text);
+
+				if (width == null) {
+					width = fontTempSize.width / 3.4;
+				}
+				if (height == null) {
+					height = fontTempSize.height / 2.5;
+				}
+				if (color == null) {
+					color = "#FFFFFF";
+				}
+				if (background == null) {
+					background = "rgba(0,0,0,0.7)";
+				}
+
+				let canvas = document.createElement('canvas');
+				let ctx = canvas.getContext('2d');
+				canvas.width = width * 4;
+				canvas.height = height * 4;
+				ctx.fillStyle = background;
+				ctx.fillRect(0, 0, width * 4, height * 4);
+				ctx.fillStyle = color;
+				ctx.font = 'normal ' + fontSize + 'px "' + font + '"';
+				ctx.fillText(text, fontSize / 2.6, fontSize + 32);
+				let url = canvas.toDataURL('image/png');
+				let geometry1 = new THREE.PlaneGeometry(width, height);
+				let texture = THREE.ImageUtils.loadTexture(url, null, function(t) {});
+
+				let material1 = new THREE.MeshBasicMaterial({
+					map: texture,
+					side: THREE.DoubleSide,
+					opacity: 1,
+					transparent: true,
+				});
+
+				let newMark = new THREE.Mesh(geometry1, material1);
+				newMark.position.set(x, z, -y);
+				newMark.name = name;
+				markList.push(newMark);
+				scene.add(newMark);
+				render();
+			}
+
+			// Remove text label
+			window.removeTextMark = function(name) {
+				if (name == null) {
+					return false;
+				}
+
+				for (var i = 0; i < markList.length; i++) {
+					if (markList[i].name == name) {
+						var selectedObject = scene.getObjectByName(name);
+						scene.remove(selectedObject);
+						markList.splice(i, 1);
+						render();
+						return true;
+					}
+				}
+				return false;
+			}
+
+			// Update label coords
+			window.updateTextMarkCoords = function(name, x, y, z) {
+				var selectedObject = scene.getObjectByName(name);
+				if (selectedObject != null && selectedObject.position != undefined) {
+					selectedObject.position.set(x, z, -y);
+					render();
+				}
+			}
+
+			// Init functions
+			function init() {
+
+				container = document.createElement('div');
+				document.body.appendChild(container);
+
+				// Set default camera
+				camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 50000);
+				camera.position.x = -6817.53520738839;
+				camera.position.y = 5122.667802130858;
+				camera.position.z = 2358.9515954296567;
+				camera.rotation.x = -1.0487587367436757;
+				camera.rotation.y = -0.8076078014684026;
+				camera.rotation.z = -0.8984546685815199;
+
+				scene = new THREE.Scene();
+				lighting = false;
+
+				ambient = new THREE.AmbientLight(0xffffff, 0.5);
+				scene.add(ambient);
+
+				// Lights
+				keyLight = new THREE.DirectionalLight(new THREE.Color('hsl(30, 100%, 75%)'), 1.5);
+				keyLight.position.set( - 100, 0, 100);
+				fillLight = new THREE.DirectionalLight(new THREE.Color('hsl(240, 100%, 75%)'), 1.75);
+				fillLight.position.set(100, 0, 100);
+				backLight = new THREE.DirectionalLight(0xffffff, 1.0);
+				backLight.position.set(100, 0, -100).normalize();
+
+				// Load the meterial
+				var mtlLoader = new THREE.MTLLoader();
+				mtlLoader.setBaseUrl('obj/');
+				mtlLoader.setPath('obj/');
+				mtlLoader.load('model.mtl', function(materials) {
+					taa = materials;
+					materials.preload();
+
+					for (var a in materials.materials) {
+						if (materials.materials[a].map != null && materials.materials[a].map != undefined) {
+							materials.materials[a].map.magFilter = THREE.NearestFilter;
+							materials.materials[a].map.minFilter = THREE.LinearFilter;
+						}
+					}
+
+					// Load the model
+					var objLoader = new THREE.OBJLoader();
+					objLoader.setMaterials(materials);
+					objLoader.setPath('obj/');
+					objLoader.load('model.obj',
+					function(object) {
+						window.object_g = object;
+						scene.add(object);
+
+						// Mouse box geometry
+						/*const rollOverGeo = new THREE.BoxGeometry( 20, 20, 20 );
 					rollOverMaterial = new THREE.MeshBasicMaterial( { color: 0xff0000, opacity: 0.5, transparent: true } );
 					rollOverMesh = new THREE.Mesh( rollOverGeo, rollOverMaterial );
 					scene.add(rollOverMesh);*/
-					
-					// Sun light
-					sunlight = new THREE.DirectionalLight(0xffffff, 1.6, 100);
-					sunlight.position.set(554, 1000, 1);
-					sunlight.castShadow = true;
-					sunlight.shadow.mapSize.width = 512; // default
-					sunlight.shadow.mapSize.height = 512; // default
-					sunlight.shadow.camera.near = 0.5; // default
-					sunlight.shadow.camera.far = 500; // default
-					scene.add(sunlight);
-                });
 
-            });
+						// Sun light
+						sunlight = new THREE.DirectionalLight(0xffffff, 1.6, 100);
+						sunlight.position.set(554, 1000, 1);
+						sunlight.castShadow = true;
+						sunlight.shadow.mapSize.width = 512; // default
+						sunlight.shadow.mapSize.height = 512; // default
+						sunlight.shadow.camera.near = 0.5; // default
+						sunlight.shadow.camera.far = 500; // default
+						scene.add(sunlight);
+					});
 
-            /* Renderer */
+				});
 
-            renderer = new THREE.WebGLRenderer();
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setClearColor(new THREE.Color("hsl(0, 0%, 10%)"));
+				/* Renderer */
 
-            container.appendChild(renderer.domElement);
+				renderer = new THREE.WebGLRenderer();
+				renderer.setPixelRatio(window.devicePixelRatio);
+				renderer.setSize(window.innerWidth, window.innerHeight);
+				renderer.setClearColor(new THREE.Color("hsl(0, 0%, 10%)"));
 
-            /* Controls */
+				container.appendChild(renderer.domElement);
 
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 1.25;
-            controls.enableZoom = true;
+				/* Controls */
 
-            /* Events */
+				controls = new THREE.OrbitControls(camera, renderer.domElement);
+				controls.enableDamping = true;
+				controls.dampingFactor = 1.25;
+				controls.enableZoom = true;
 
-            window.addEventListener('resize', onWindowResize, false);
-            window.addEventListener('keydown', onKeyboardEvent, false);
-            window.addEventListener('mousemove', onMouseMove, false);
-            window.addEventListener('mousedown', onMouseDown, false);
-            window.addEventListener('mouseup', onMouseUp, false);
-			window.addEventListener("message", function (event) {
-				var message = event.data;
-				if(message.action != undefined) {
-					switch(message.action) {
+				/* Events */
+
+				window.addEventListener('resize', onWindowResize, false);
+				window.addEventListener('keydown', onKeyboardEvent, false);
+				window.addEventListener('mousemove', onMouseMove, false);
+				window.addEventListener('mousedown', onMouseDown, false);
+				window.addEventListener('mouseup', onMouseUp, false);
+				window.addEventListener("message",
+				function(event) {
+					var message = event.data;
+					if (message.action != undefined) {
+						switch (message.action) {
 						case "addMark":
 							var data = message.data;
 							addTextMark(data.name, data.text, data.x, data.y, data.z, data.font, data.fontSize, data.width, data.height, data.color, data.background);
@@ -346,112 +300,110 @@
 							break;
 						default:
 							console.error("Undefined action:", message.action);
+						}
+					}
+				});
+			}
+
+			/* Events Functions */
+
+			function onMouseMove(event) {
+				if (isFocus) {
+					event.preventDefault();
+					mouseX = event.clientX;
+					mouseY = event.clientY;
+				}
+			}
+
+			function onMouseDown(e) {
+				e = e || window.event;
+				if (e.button == 0) {
+					lastClick = {
+						time: Date.now(),
+						clientX: e.clientX,
+						clientY: e.clientY
 					}
 				}
-			});
-        }
-		
-		/* Events Functions */
-		
-		function onMouseMove( event ) {
-			if(isFocus) {
-				event.preventDefault();
-				mouseX = event.clientX;
-				mouseY = event.clientY;
 			}
-		}
-		
-		function onMouseDown(e) {
-			e = e || window.event;
-			if(e.button == 0) {
-				lastClick = {
-					time: Date.now(),
-					clientX: e.clientX,
-					clientY: e.clientY
+
+			function onMouseUp(e) {
+				e = e || window.event;
+				if (e.button == 0) {
+					if (cp != null && lastClick.time != null && Date.now() - lastClick.time < 500 && lastClick.clientX == e.clientX && lastClick.clientY == e.clientY) {
+						$.post('https://zerodream_3dmap/callback', JSON.stringify({
+							action: 'setLocation',
+							data: {
+								x: cp.x,
+								y: -cp.z,
+								z: cp.y
+							}
+						}));
+					}
 				}
 			}
-		}
-		
-		function onMouseUp(e) {
-			e = e || window.event;
-			if(e.button == 0) {
-				if(cp != null && lastClick.time != null && Date.now() - lastClick.time < 500 && lastClick.clientX == e.clientX && lastClick.clientY == e.clientY) {
+
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize(window.innerWidth, window.innerHeight);
+			}
+
+			function onKeyboardEvent(e) {
+				if (e.code === 'KeyL') {
+					lighting = !lighting;
+					if (lighting) {
+						ambient.intensity = 0.25;
+						scene.add(keyLight);
+						scene.add(fillLight);
+						scene.add(backLight);
+					} else {
+						ambient.intensity = 1.0;
+						scene.remove(keyLight);
+						scene.remove(fillLight);
+						scene.remove(backLight);
+					}
+				} else if (e.keyCode == webKey || e.keyCode == 27) {
 					$.post('https://zerodream_3dmap/callback', JSON.stringify({
-						action: 'setLocation',
-						data: {
-							x: cp.x,
-							y: -cp.z,
-							z: cp.y
-						}
+						action: 'closeMap'
 					}));
 				}
 			}
-		}
-		
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
 
-        function onKeyboardEvent(e) {
-            if (e.code === 'KeyL') {
-                lighting = !lighting;
-                if (lighting) {
-                    ambient.intensity = 0.25;
-                    scene.add(keyLight);
-                    scene.add(fillLight);
-                    scene.add(backLight);
-                } else {
-                    ambient.intensity = 1.0;
-                    scene.remove(keyLight);
-                    scene.remove(fillLight);
-                    scene.remove(backLight);
-                }
-            } else if (e.keyCode == webKey || e.keyCode == 27) {
-				$.post('https://zerodream_3dmap/callback', JSON.stringify({
-					action: 'closeMap'
-				}));
-			}
-        }
-
-        function animate() {
-			if(isFocus) {
-				requestAnimationFrame(animate);
-				controls.update();
-				updateLabels();
-				mouseCheck();
-				render();
-			}
-        }
-		
-		function updateLabels() {
-			for(var i = 0;i < markList.length;i++) {
-				markList[i].lookAt(camera.position);
-			}
-		}
-		
-		function mouseCheck() {
-			if(mouseX != oldMouseX || mouseY != oldMouseY) {
-				mouse.set( ( mouseX / window.innerWidth ) * 2 - 1, - ( mouseY / window.innerHeight ) * 2 + 1 );
-				raycaster.setFromCamera( mouse, camera );
-				const intersects = raycaster.intersectObjects( scene.children[1].children );
-				if (intersects.length > 0) {
-					const intersect = intersects[0];
-					// rollOverMesh.position.copy(intersect.point).add(intersect.face.normal);
-					cp = intersect.point;
-					window.worldPos = cp; // Set mouse position to global
+			function animate() {
+				if (isFocus) {
+					requestAnimationFrame(animate);
+					controls.update();
+					updateLabels();
+					mouseCheck();
+					render();
 				}
-				oldMouseX = mouseX;
-				oldMouseY = mouseY;
 			}
-		}
 
-        function render() {
-            renderer.render(scene, camera);
-        }
-		
-    </script>
+			function updateLabels() {
+				for (var i = 0; i < markList.length; i++) {
+					markList[i].lookAt(camera.position);
+				}
+			}
 
-</body>
+			function mouseCheck() {
+				if (mouseX != oldMouseX || mouseY != oldMouseY) {
+					mouse.set((mouseX / window.innerWidth) * 2 - 1, -(mouseY / window.innerHeight) * 2 + 1);
+					raycaster.setFromCamera(mouse, camera);
+					const intersects = raycaster.intersectObjects(scene.children[1].children);
+					if (intersects.length > 0) {
+						const intersect = intersects[0];
+						// rollOverMesh.position.copy(intersect.point).add(intersect.face.normal);
+						cp = intersect.point;
+						window.worldPos = cp; // Set mouse position to global
+					}
+					oldMouseX = mouseX;
+					oldMouseY = mouseY;
+				}
+			}
+
+			function render() {
+				renderer.render(scene, camera);
+			}
+		</script>
+	</body>
 </html>
